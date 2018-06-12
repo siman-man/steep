@@ -4589,4 +4589,159 @@ EOF
 
     assert_empty typing.errors
   end
+
+  def test_tuple
+    source = parse_ruby(<<EOF)
+# @type var x: [Integer, String]
+x = []
+
+a = x[0]
+b = x[1]
+c = x[2]
+EOF
+
+    typing = Typing.new
+    annotations = source.annotations(block: source.node)
+    checker = new_subtyping_checker()
+
+    const_env = ConstantEnv.new(builder: checker.builder, current_namespace: nil)
+    type_env = TypeEnv.build(annotations: annotations,
+                             subtyping: checker,
+                             const_env: const_env,
+                             signatures: checker.builder.signatures)
+
+    construction = TypeConstruction.new(checker: checker,
+                                        source: source,
+                                        annotations: annotations,
+                                        type_env: type_env,
+                                        block_context: nil,
+                                        self_type: Types::Name.new_instance(name: "::Object"),
+                                        method_context: nil,
+                                        typing: typing,
+                                        module_context: nil,
+                                        break_context: nil)
+    construction.synthesize(source.node)
+
+    assert_equal parse_type('::Integer'), type_env.lvar_types[:a]
+    assert_equal parse_type('::String'), type_env.lvar_types[:b]
+    assert_equal parse_type('::Integer | ::String'), type_env.lvar_types[:c]
+
+    assert_empty typing.errors
+  end
+
+  def test_tuple1
+    source = parse_ruby(<<EOF)
+# @type var x: [Integer, String]
+x = [1, "foo"]
+x = ["foo", 1]
+EOF
+
+    typing = Typing.new
+    annotations = source.annotations(block: source.node)
+    checker = new_subtyping_checker(<<-EOF)
+class TupleMethod
+  def foo: ([Integer, String]) -> [Integer, String]
+end
+    EOF
+
+    const_env = ConstantEnv.new(builder: checker.builder, current_namespace: nil)
+    type_env = TypeEnv.build(annotations: annotations,
+                             subtyping: checker,
+                             const_env: const_env,
+                             signatures: checker.builder.signatures)
+
+    construction = TypeConstruction.new(checker: checker,
+                                        source: source,
+                                        annotations: annotations,
+                                        type_env: type_env,
+                                        block_context: nil,
+                                        self_type: Types::Name.new_instance(name: "::Object"),
+                                        method_context: nil,
+                                        typing: typing,
+                                        module_context: nil,
+                                        break_context: nil)
+    construction.synthesize(source.node)
+
+    assert_equal 1, typing.errors.size
+  end
+
+  def test_tuple2
+    source = parse_ruby(<<EOF)
+x = TupleMethod.new.foo([1, "foo"])
+EOF
+
+    typing = Typing.new
+    annotations = source.annotations(block: source.node)
+    checker = new_subtyping_checker(<<-EOF)
+class TupleMethod
+  def foo: ([Integer, String]) -> [String, Integer]
+end
+    EOF
+
+    const_env = ConstantEnv.new(builder: checker.builder, current_namespace: nil)
+    type_env = TypeEnv.build(annotations: annotations,
+                             subtyping: checker,
+                             const_env: const_env,
+                             signatures: checker.builder.signatures)
+
+    construction = TypeConstruction.new(checker: checker,
+                                        source: source,
+                                        annotations: annotations,
+                                        type_env: type_env,
+                                        block_context: nil,
+                                        self_type: Types::Name.new_instance(name: "::Object"),
+                                        method_context: nil,
+                                        typing: typing,
+                                        module_context: nil,
+                                        break_context: nil)
+    construction.synthesize(source.node)
+
+    assert_empty typing.errors
+    assert_equal parse_type('[::String, ::Integer]'), type_env.lvar_types[:x]
+  end
+
+  def test_tuple3
+    source = parse_ruby(<<EOF)
+x, y, z = TupleMethod.new.foo()
+a, b = TupleMethod.new.foo()
+_, _, _, c = TupleMethod.new.foo()
+EOF
+
+    typing = Typing.new
+    annotations = source.annotations(block: source.node)
+    checker = new_subtyping_checker(<<-EOF)
+class TupleMethod
+  def foo: () -> [String, Integer, bool]
+end
+    EOF
+
+    const_env = ConstantEnv.new(builder: checker.builder, current_namespace: nil)
+    type_env = TypeEnv.build(annotations: annotations,
+                             subtyping: checker,
+                             const_env: const_env,
+                             signatures: checker.builder.signatures)
+
+    construction = TypeConstruction.new(checker: checker,
+                                        source: source,
+                                        annotations: annotations,
+                                        type_env: type_env,
+                                        block_context: nil,
+                                        self_type: Types::Name.new_instance(name: "::Object"),
+                                        method_context: nil,
+                                        typing: typing,
+                                        module_context: nil,
+                                        break_context: nil)
+    construction.synthesize(source.node)
+
+    assert_empty typing.errors
+
+    assert_equal parse_type('::String'), type_env.lvar_types[:x]
+    assert_equal parse_type('::Integer'), type_env.lvar_types[:y]
+    assert_equal parse_type('bool'), type_env.lvar_types[:z]
+
+    assert_equal parse_type('::String'), type_env.lvar_types[:a]
+    assert_equal parse_type('::Integer'), type_env.lvar_types[:b]
+
+    assert_equal parse_type("nil"), type_env.lvar_types[:c]
+  end
 end
